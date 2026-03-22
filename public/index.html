@@ -1,0 +1,1387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#000000">
+    <title>Remote Control</title>
+    <link rel="manifest" href="/manifest.json">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #000;
+            touch-action: none;
+        }
+
+        .container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #connectionScreen {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+        }
+
+        #connectionScreen h1 {
+            font-family: -apple-system, sans-serif;
+            color: #fff;
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+
+        #connectionScreen p {
+            color: #888;
+            font-size: 14px;
+            margin-bottom: 30px;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-top-color: #00d4ff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        #statusMessage {
+            color: #00d4ff;
+            font-family: -apple-system, sans-serif;
+            font-size: 14px;
+            margin-top: 20px;
+        }
+
+        .error {
+            color: #ff4757 !important;
+        }
+
+        #remoteScreen {
+            flex: 1;
+            display: none;
+            flex-direction: column;
+            background: #000;
+        }
+
+        #videoContainer {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            background: #111;
+        }
+
+        #remoteVideo {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            transform-origin: 50% 50%;
+            transition: none;
+        }
+
+        .zoom-indicator {
+            position: absolute;
+            bottom: 80px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            color: #fff;
+            padding: 5px 10px;
+            border-radius: 10px;
+            font-family: -apple-system, sans-serif;
+            font-size: 12px;
+            z-index: 20;
+            pointer-events: none;
+        }
+
+        #touchpad {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+        }
+
+        #controls {
+            background: rgba(20, 20, 30, 0.95);
+            padding: 8px 10px;
+            padding-bottom: calc(8px + env(safe-area-inset-bottom));
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            flex-shrink: 0;
+        }
+
+        .control-row {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+        }
+
+        .control-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: #fff;
+            width: 44px;
+            height: 44px;
+            border-radius: 10px;
+            font-size: 18px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: rgba(0, 212, 255, 0.3);
+        }
+
+        .control-btn.with-label {
+            width: auto;
+            min-width: 44px;
+            padding: 6px 12px;
+        }
+
+        .control-btn svg {
+            width: 22px;
+            height: 22px;
+            flex-shrink: 0;
+        }
+
+        .control-btn.with-label svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        .control-btn .btn-label {
+            font-size: 9px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            opacity: 0.9;
+        }
+
+        .control-btn:active {
+            background: rgba(0, 212, 255, 0.5);
+            transform: scale(0.95);
+        }
+
+        .control-btn.active {
+            background: #00d4ff;
+            color: #000;
+        }
+
+        .control-btn.pressed {
+            background: rgba(0, 255, 0, 0.5);
+        }
+
+        #touchIndicator {
+            position: fixed;
+            width: 60px;
+            height: 60px;
+            border: 2px solid rgba(0, 212, 255, 0.6);
+            border-radius: 50%;
+            pointer-events: none;
+            opacity: 0;
+            transform: translate(-50%, -50%);
+            transition: opacity 0.1s;
+            z-index: 100;
+        }
+
+        #touchIndicator.visible {
+            opacity: 1;
+        }
+
+        .mode-indicator {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            color: #00d4ff;
+            padding: 8px 15px;
+            border-radius: 15px;
+            font-family: -apple-system, sans-serif;
+            font-size: 13px;
+            font-weight: 600;
+            z-index: 20;
+            pointer-events: none;
+        }
+
+        .debug-panel {
+            position: absolute;
+            bottom: 70px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            color: #0f0;
+            padding: 8px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 10px;
+            z-index: 25;
+            max-width: 200px;
+            pointer-events: none;
+        }
+
+        #keyboard {
+            display: none;
+            background: rgba(20, 20, 30, 0.95);
+            padding: 10px;
+            touch-action: auto;
+        }
+
+        .keyboard-row {
+            margin-bottom: 10px;
+        }
+
+        #keyboard input {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 8px;
+            padding: 14px;
+            color: #fff;
+            font-size: 18px;
+            outline: none;
+            /* Allow text input */
+            -webkit-user-select: text;
+            user-select: text;
+            -webkit-touch-callout: default;
+            touch-action: auto;
+        }
+
+        #keyboard input:focus {
+            border-color: #00d4ff;
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        #keyboard input::placeholder {
+            color: #888;
+        }
+
+        .keyboard-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .kb-btn {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            touch-action: manipulation;
+            min-height: 44px;
+            -webkit-tap-highlight-color: rgba(0, 212, 255, 0.3);
+        }
+
+        .kb-btn.cancel {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+        }
+
+        .kb-btn.cancel:active {
+            background: rgba(255, 71, 87, 0.5);
+        }
+
+        .kb-btn.send {
+            background: #00d4ff;
+            color: #000;
+        }
+
+        .kb-btn.send:active {
+            background: #00a8cc;
+        }
+
+        .kb-btn:active {
+            transform: scale(0.95);
+        }
+
+        /* Scroll indicator for controls */
+        .scroll-indicator {
+            display: none;
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 212, 255, 0.8);
+            color: #000;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            z-index: 30;
+            pointer-events: none;
+            animation: bounce 2s infinite;
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateX(-50%) translateY(0); }
+            50% { transform: translateX(-50%) translateY(-5px); }
+        }
+
+        /* Portrait mode: make controls scrollable if needed */
+        @media (orientation: portrait) and (max-height: 600px) {
+            #controls {
+                max-height: 140px;
+                overflow-y: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            .scroll-indicator {
+                display: block;
+            }
+        }
+
+        /* Landscape mode optimizations */
+        @media (orientation: landscape) {
+            .scroll-indicator {
+                display: block;
+                bottom: auto;
+                top: 50%;
+                left: auto;
+                right: 15px;
+                transform: translateY(-50%) rotate(-90deg);
+            }
+
+            @keyframes bounce {
+                0%, 100% { transform: translateY(-50%) rotate(-90deg) translateX(0); }
+                50% { transform: translateY(-50%) rotate(-90deg) translateX(-5px); }
+            }
+
+            #remoteScreen {
+                flex-direction: row;
+            }
+
+            #videoContainer {
+                flex: 1;
+            }
+
+            #controls {
+                width: auto;
+                min-width: 70px;
+                max-width: 90px;
+                height: 100%;
+                padding: 8px 4px;
+                padding-right: calc(4px + env(safe-area-inset-right));
+                padding-bottom: 8px;
+                border-top: none;
+                border-left: 1px solid rgba(255, 255, 255, 0.1);
+                overflow-y: auto;
+                overflow-x: hidden;
+                flex-direction: column;
+                gap: 4px;
+                position: relative;
+                /* Enable smooth scrolling */
+                -webkit-overflow-scrolling: touch;
+                scrollbar-width: thin;
+                scrollbar-color: rgba(0, 212, 255, 0.5) transparent;
+            }
+
+            #controls::-webkit-scrollbar {
+                width: 3px;
+            }
+
+            #controls::-webkit-scrollbar-track {
+                background: transparent;
+            }
+
+            #controls::-webkit-scrollbar-thumb {
+                background: rgba(0, 212, 255, 0.5);
+                border-radius: 3px;
+            }
+
+            #controls::-webkit-scrollbar-thumb:hover {
+                background: rgba(0, 212, 255, 0.7);
+            }
+
+            /* Fade effect at bottom to indicate more content */
+            #controls::after {
+                content: '';
+                position: sticky;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                height: 30px;
+                background: linear-gradient(to bottom, transparent, rgba(20, 20, 30, 0.95));
+                pointer-events: none;
+                z-index: 5;
+            }
+
+            .control-row {
+                flex-direction: column;
+                width: 100%;
+                gap: 4px;
+            }
+
+            .control-btn {
+                width: 100%;
+                height: 38px;
+                padding: 4px;
+                border-radius: 8px;
+            }
+
+            .control-btn.with-label {
+                width: 100%;
+                height: 38px;
+                padding: 4px 6px;
+                flex-direction: row;
+                gap: 3px;
+            }
+
+            .control-btn svg {
+                width: 16px;
+                height: 16px;
+            }
+
+            .control-btn.with-label svg {
+                width: 14px;
+                height: 14px;
+            }
+
+            .control-btn .btn-label {
+                font-size: 7px;
+                letter-spacing: 0.3px;
+            }
+
+            .zoom-indicator {
+                bottom: 10px;
+                right: 100px;
+                font-size: 11px;
+                padding: 4px 8px;
+            }
+
+            .debug-panel {
+                bottom: 10px;
+                left: 10px;
+                font-size: 9px;
+                padding: 6px;
+            }
+
+            .mode-indicator {
+                top: 10px;
+                left: 10px;
+                transform: none;
+                font-size: 12px;
+                padding: 6px 12px;
+            }
+
+            #keyboard {
+                position: absolute;
+                bottom: 0;
+                left: 0;
+                right: 90px;
+                background: rgba(20, 20, 30, 0.98);
+                border-top: 1px solid rgba(255, 255, 255, 0.2);
+                padding: 8px;
+                z-index: 50;
+            }
+
+            #keyboard input {
+                font-size: 15px;
+                padding: 10px;
+            }
+
+            .kb-btn {
+                padding: 10px;
+                font-size: 13px;
+                min-height: 44px;
+                touch-action: manipulation;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Connection Screen -->
+        <div id="connectionScreen">
+            <h1>Remote Control</h1>
+            <p>Connecting to your PC...</p>
+            <div class="spinner"></div>
+            <p id="statusMessage">Establishing connection</p>
+        </div>
+
+        <!-- Remote Screen -->
+        <div id="remoteScreen">
+            <div id="videoContainer">
+                <video id="remoteVideo" autoplay playsinline muted></video>
+                <div id="touchpad"></div>
+                <div class="mode-indicator" id="modeIndicator">Touchpad Mode</div>
+                <div class="zoom-indicator" id="zoomIndicator">100%</div>
+                <div class="debug-panel" id="debugPanel">
+                    Status: <span id="channelStatus">waiting</span><br>
+                    Last: <span id="lastCmd">-</span>
+                </div>
+            </div>
+
+            <div id="keyboard">
+                <div class="keyboard-row">
+                    <input type="text" id="keyboardInput" placeholder="Type here..." autocomplete="off" autocorrect="off" autocapitalize="off">
+                </div>
+                <div class="keyboard-buttons">
+                    <button class="kb-btn cancel" id="kbCancel">Cancel</button>
+                    <button class="kb-btn send" id="kbSend">Send</button>
+                </div>
+            </div>
+
+            <div id="controls">
+                <div class="scroll-indicator">↓ Scroll ↓</div>
+                <!-- Row 1: Main controls -->
+                <div class="control-row">
+                    <button class="control-btn with-label" id="leftClickBtn" title="Left Click">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 2C8.14 2 5 5.14 5 9v6c0 3.86 3.14 7 7 7s7-3.14 7-7V9c0-3.86-3.14-7-7-7zm0 2c2.76 0 5 2.24 5 5v2h-4V4.05c-.33-.03-.66-.05-1-.05zm-1 .05V11H7V9c0-2.76 2.24-5 5-5-.34 0-.67.02-1 .05z"/>
+                        </svg>
+                        <span class="btn-label">Left</span>
+                    </button>
+                    <button class="control-btn with-label" id="rightClickBtn" title="Right Click">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 2C8.14 2 5 5.14 5 9v6c0 3.86 3.14 7 7 7s7-3.14 7-7V9c0-3.86-3.14-7-7-7zm1 2.05c.34.03.67.05 1 .05 2.76 0 5 2.24 5 5v2h-4V4.05h-2zM7 9c0-2.76 2.24-5 5-5v7H7V9z"/>
+                        </svg>
+                        <span class="btn-label">Right</span>
+                    </button>
+                    <button class="control-btn" id="scrollBtn" title="Scroll Mode">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 5l-4 4h3v6H8l4 4 4-4h-3V9h3l-4-4z"/>
+                        </svg>
+                    </button>
+                    <button class="control-btn" id="keyboardBtn" title="Keyboard">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M20 5H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm-9 3h2v2h-2V8zm0 3h2v2h-2v-2zM8 8h2v2H8V8zm0 3h2v2H8v-2zm-1 2H5v-2h2v2zm0-3H5V8h2v2zm9 7H8v-2h8v2zm0-4h-2v-2h2v2zm0-3h-2V8h2v2zm3 3h-2v-2h2v2zm0-3h-2V8h2v2z"/>
+                        </svg>
+                    </button>
+                    <button class="control-btn" id="fullscreenBtn" title="Fullscreen">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+                        </svg>
+                    </button>
+                </div>
+                <!-- Row 2: Extra controls -->
+                <div class="control-row">
+                    <button class="control-btn" id="lockBtn" title="Lock Screen">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
+                        </svg>
+                    </button>
+                    <button class="control-btn" id="speakBtn" title="Voice Input">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                        </svg>
+                    </button>
+                    <button class="control-btn" id="muteBtn" title="Toggle Audio">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" id="muteIcon">
+                            <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+                        </svg>
+                    </button>
+                    <button class="control-btn" id="zoomInBtn" title="Zoom In">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14zm.5-7H9v2H7v1h2v2h1v-2h2V9h-2V7z"/>
+                        </svg>
+                    </button>
+                    <button class="control-btn" id="zoomOutBtn" title="Zoom Out">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14zM7 9h5v1H7V9z"/>
+                        </svg>
+                    </button>
+                    <button class="control-btn" id="resetZoomBtn" title="Reset Zoom">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="touchIndicator"></div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        // Get room ID from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const roomId = urlParams.get('room');
+
+        if (!roomId) {
+            document.getElementById('statusMessage').textContent = 'No room code found in URL';
+            document.getElementById('statusMessage').classList.add('error');
+            throw new Error('No room ID');
+        }
+
+        const socket = io();
+        let peerConnection;
+        let dataChannel;
+        let isScrollMode = false;
+        let isKeyboardOpen = false;
+
+        const config = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' }
+            ]
+        };
+
+        // UI elements
+        const connectionScreen = document.getElementById('connectionScreen');
+        const remoteScreen = document.getElementById('remoteScreen');
+        const video = document.getElementById('remoteVideo');
+        const touchpad = document.getElementById('touchpad');
+        const statusMessage = document.getElementById('statusMessage');
+        const touchIndicator = document.getElementById('touchIndicator');
+        const modeIndicator = document.getElementById('modeIndicator');
+        const keyboardDiv = document.getElementById('keyboard');
+        const keyboardInput = document.getElementById('keyboardInput');
+
+        function updateStatus(message, isError = false) {
+            statusMessage.textContent = message;
+            if (isError) {
+                statusMessage.classList.add('error');
+            } else {
+                statusMessage.classList.remove('error');
+            }
+        }
+
+        function showRemoteScreen() {
+            connectionScreen.style.display = 'none';
+            remoteScreen.style.display = 'flex';
+        }
+
+        // Connect to signaling server and join room
+        socket.on('connect', () => {
+            console.log('Socket connected');
+            updateStatus('Connected to server');
+            socket.emit('join-room', roomId);
+            updateStatus('Waiting for PC...');
+        });
+
+        socket.on('disconnect', () => {
+            console.log('Socket disconnected');
+            updateStatus('Disconnected from server', true);
+        });
+
+        // Receive WebRTC offer from PC
+        socket.on('offer', async (offer) => {
+            console.log('=== OFFER RECEIVED ===');
+            console.log('Offer type:', offer.type);
+            updateStatus('Connecting to PC...');
+
+            try {
+                // Clean up old connection if exists
+                if (peerConnection) {
+                    console.log('Closing old peer connection');
+                    peerConnection.close();
+                }
+
+                peerConnection = new RTCPeerConnection(config);
+                console.log('Created new RTCPeerConnection');
+
+                // Monitor connection state
+                peerConnection.onconnectionstatechange = () => {
+                    console.log('Connection state:', peerConnection.connectionState);
+                    document.getElementById('channelStatus').textContent =
+                        `conn:${peerConnection.connectionState}`;
+                };
+
+                peerConnection.oniceconnectionstatechange = () => {
+                    console.log('ICE connection state:', peerConnection.iceConnectionState);
+                };
+
+                // Handle incoming video stream
+                peerConnection.ontrack = (event) => {
+                    console.log('Track received:', event.track.kind);
+                    video.srcObject = event.streams[0];
+                    showRemoteScreen();
+                };
+
+                // PHONE RECEIVES the data channel (answerer receives it)
+                peerConnection.ondatachannel = (event) => {
+                    console.log('=== DATA CHANNEL RECEIVED ===');
+                    console.log('Channel label:', event.channel.label);
+                    console.log('Channel state:', event.channel.readyState);
+
+                    dataChannel = event.channel;
+                    document.getElementById('channelStatus').textContent = 'received';
+
+                    dataChannel.onopen = () => {
+                        console.log('Data channel OPENED');
+                        document.getElementById('channelStatus').textContent = 'open';
+                        modeIndicator.textContent = 'Connected!';
+                        modeIndicator.style.background = 'rgba(0, 255, 0, 0.7)';
+                        setTimeout(() => {
+                            modeIndicator.textContent = 'Touchpad Mode';
+                            modeIndicator.style.background = 'rgba(0, 0, 0, 0.7)';
+                        }, 2000);
+                    };
+
+                    dataChannel.onclose = () => {
+                        console.log('Data channel closed');
+                        document.getElementById('channelStatus').textContent = 'closed';
+                        modeIndicator.textContent = 'Disconnected';
+                        modeIndicator.style.background = 'rgba(255, 0, 0, 0.7)';
+                    };
+
+                    dataChannel.onerror = (err) => {
+                        console.error('Data channel error:', err);
+                        document.getElementById('channelStatus').textContent = 'error';
+                        modeIndicator.textContent = 'Error';
+                        modeIndicator.style.background = 'rgba(255, 0, 0, 0.7)';
+                    };
+                };
+
+                // Handle ICE candidates
+                peerConnection.onicecandidate = (event) => {
+                    if (event.candidate) {
+                        console.log('Sending ICE candidate');
+                        socket.emit('ice-candidate', {
+                            room: roomId,
+                            candidate: event.candidate
+                        });
+                    }
+                };
+
+                // Set remote description and create answer
+                console.log('Setting remote description...');
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+                console.log('Remote description set');
+
+                console.log('Creating answer...');
+                const answer = await peerConnection.createAnswer();
+                console.log('Answer created');
+
+                console.log('Setting local description...');
+                await peerConnection.setLocalDescription(answer);
+                console.log('Local description set');
+
+                socket.emit('answer', { room: roomId, answer: answer });
+                console.log('Answer sent');
+
+            } catch (err) {
+                console.error('Error handling offer:', err);
+                updateStatus(`Error: ${err.message}`, true);
+            }
+        });
+
+        socket.on('ice-candidate', async (candidate) => {
+            try {
+                if (peerConnection) {
+                    await peerConnection.addIceCandidate(candidate);
+                }
+            } catch (err) {
+                console.error('ICE candidate error:', err);
+            }
+        });
+
+        // Send command through data channel
+        function sendCommand(command) {
+            const channelStatusEl = document.getElementById('channelStatus');
+            const lastCmdEl = document.getElementById('lastCmd');
+
+            console.log('Sending command:', command, 'Channel state:', dataChannel ? dataChannel.readyState : 'no channel');
+
+            if (channelStatusEl) {
+                channelStatusEl.textContent = dataChannel ? dataChannel.readyState : 'none';
+            }
+
+            if (dataChannel && dataChannel.readyState === 'open') {
+                dataChannel.send(JSON.stringify(command));
+
+                // Visual feedback
+                if (lastCmdEl) {
+                    lastCmdEl.textContent = command.action;
+                }
+                modeIndicator.textContent = command.action.toUpperCase();
+                setTimeout(() => {
+                    modeIndicator.textContent = isScrollMode ? 'Scroll Mode' : 'Touchpad Mode';
+                }, 300);
+            } else {
+                console.warn('Data channel not open, state:', dataChannel ? dataChannel.readyState : 'no channel');
+                modeIndicator.textContent = 'NO CONNECTION';
+                modeIndicator.style.background = 'rgba(255, 0, 0, 0.7)';
+            }
+        }
+
+        // Touch handling variables
+        let lastTouchX = 0;
+        let lastTouchY = 0;
+        let touchStartTime = 0;
+        let touchMoved = false;
+        let lastTapTime = 0;
+        const TAP_THRESHOLD = 200; // ms
+        const DOUBLE_TAP_THRESHOLD = 300; // ms
+        const MOVE_THRESHOLD = 5; // pixels
+
+        // Pinch-to-zoom and pan variables
+        let initialPinchDistance = 0;
+        let lastPinchZoom = 1;
+        let isPinching = false;
+        let lastPanX = 0;
+        let lastPanY = 0;
+        let isPanning = false;
+        let lastSingleTouchX = 0;
+        let lastSingleTouchY = 0;
+
+        // Touch event handlers
+        touchpad.addEventListener('touchstart', (e) => {
+            // Skip if multi-touch (handled by pinch-to-zoom)
+            if (e.touches.length > 1) {
+                return;
+            }
+
+            e.preventDefault();
+            const touch = e.touches[0];
+            lastTouchX = touch.clientX;
+            lastTouchY = touch.clientY;
+            touchStartTime = Date.now();
+            touchMoved = false;
+
+            // Show touch indicator
+            touchIndicator.style.left = touch.clientX + 'px';
+            touchIndicator.style.top = touch.clientY + 'px';
+            touchIndicator.classList.add('visible');
+        });
+
+        touchpad.addEventListener('touchmove', (e) => {
+            // Skip if pinching or panning
+            if (e.touches.length > 1 || isPinching || (isPanning && currentZoom > 1)) {
+                return;
+            }
+
+            e.preventDefault();
+            const touch = e.touches[0];
+
+            const deltaX = touch.clientX - lastTouchX;
+            const deltaY = touch.clientY - lastTouchY;
+
+            if (Math.abs(deltaX) > MOVE_THRESHOLD || Math.abs(deltaY) > MOVE_THRESHOLD) {
+                touchMoved = true;
+            }
+
+            if (isScrollMode) {
+                // Scroll mode: send scroll commands
+                sendCommand({
+                    action: 'scroll',
+                    deltaX: -deltaX * 0.5,
+                    deltaY: -deltaY * 0.5
+                });
+            } else {
+                // Touchpad mode: calculate relative position on video
+                const rect = video.getBoundingClientRect();
+                const x = (touch.clientX - rect.left) / rect.width;
+                const y = (touch.clientY - rect.top) / rect.height;
+
+                // Clamp values between 0 and 1
+                const clampedX = Math.max(0, Math.min(1, x));
+                const clampedY = Math.max(0, Math.min(1, y));
+
+                sendCommand({
+                    action: 'move',
+                    x: clampedX,
+                    y: clampedY
+                });
+            }
+
+            lastTouchX = touch.clientX;
+            lastTouchY = touch.clientY;
+
+            // Update touch indicator
+            touchIndicator.style.left = touch.clientX + 'px';
+            touchIndicator.style.top = touch.clientY + 'px';
+        });
+
+        touchpad.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            touchIndicator.classList.remove('visible');
+
+            // Reset pinch/pan state
+            if (e.touches.length < 2) {
+                isPinching = false;
+            }
+            if (e.touches.length === 0) {
+                isPanning = false;
+            }
+
+            const touchDuration = Date.now() - touchStartTime;
+            const currentTime = Date.now();
+
+            // Only handle taps if not panning/pinching and not in zoom mode
+            if (!isPinching && !touchMoved && touchDuration < TAP_THRESHOLD && currentZoom <= 1) {
+                // Check for double tap
+                if (currentTime - lastTapTime < DOUBLE_TAP_THRESHOLD) {
+                    sendCommand({ action: 'doubleclick', button: 'left' });
+                    lastTapTime = 0; // Reset to prevent triple tap
+                } else {
+                    // Single tap - wait briefly to see if it's a double tap
+                    lastTapTime = currentTime;
+                    setTimeout(() => {
+                        if (lastTapTime === currentTime) {
+                            sendCommand({ action: 'click', button: 'left' });
+                        }
+                    }, DOUBLE_TAP_THRESHOLD);
+                }
+            }
+        });
+
+        // Control buttons - use touchstart for immediate response
+        const leftClickBtn = document.getElementById('leftClickBtn');
+        const rightClickBtn = document.getElementById('rightClickBtn');
+        const scrollBtn = document.getElementById('scrollBtn');
+        const keyboardBtn = document.getElementById('keyboardBtn');
+        const fullscreenBtn = document.getElementById('fullscreenBtn');
+
+        leftClickBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            leftClickBtn.classList.add('pressed');
+            sendCommand({ action: 'click', button: 'left' });
+            setTimeout(() => leftClickBtn.classList.remove('pressed'), 200);
+        });
+
+        rightClickBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            rightClickBtn.classList.add('pressed');
+            sendCommand({ action: 'click', button: 'right' });
+            setTimeout(() => rightClickBtn.classList.remove('pressed'), 200);
+        });
+
+        scrollBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            isScrollMode = !isScrollMode;
+            scrollBtn.classList.toggle('active', isScrollMode);
+            modeIndicator.textContent = isScrollMode ? 'Scroll Mode' : 'Touchpad Mode';
+            modeIndicator.style.background = isScrollMode ? 'rgba(255, 165, 0, 0.7)' : 'rgba(0, 0, 0, 0.7)';
+        });
+
+        keyboardBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            isKeyboardOpen = !isKeyboardOpen;
+            keyboardBtn.classList.toggle('active', isKeyboardOpen);
+            keyboardDiv.style.display = isKeyboardOpen ? 'block' : 'none';
+            if (isKeyboardOpen) {
+                setTimeout(() => keyboardInput.focus(), 300);
+            } else {
+                keyboardInput.blur();
+            }
+        });
+
+        fullscreenBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (document.fullscreenElement) {
+                document.exitFullscreen();
+            } else {
+                document.documentElement.requestFullscreen();
+            }
+        });
+
+        // New control buttons
+        const lockBtn = document.getElementById('lockBtn');
+        const speakBtn = document.getElementById('speakBtn');
+        const muteBtn = document.getElementById('muteBtn');
+        const zoomInBtn = document.getElementById('zoomInBtn');
+        const zoomOutBtn = document.getElementById('zoomOutBtn');
+        const resetZoomBtn = document.getElementById('resetZoomBtn');
+        const zoomIndicator = document.getElementById('zoomIndicator');
+
+        // Zoom state
+        let currentZoom = 1;
+        const MIN_ZOOM = 0.5;
+        const MAX_ZOOM = 4;
+        const ZOOM_STEP = 0.25;
+        let isMuted = false;
+        let zoomOriginX = 50; // percentage
+        let zoomOriginY = 50; // percentage
+        let panX = 0;
+        let panY = 0;
+
+        function updateZoom(originX = null, originY = null) {
+            // Update transform origin if provided
+            if (originX !== null && originY !== null) {
+                zoomOriginX = originX;
+                zoomOriginY = originY;
+            }
+
+            video.style.transformOrigin = `${zoomOriginX}% ${zoomOriginY}%`;
+            video.style.transform = `scale(${currentZoom}) translate(${panX}px, ${panY}px)`;
+            zoomIndicator.textContent = Math.round(currentZoom * 100) + '%';
+        }
+
+        // Lock screen
+        lockBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            lockBtn.classList.add('pressed');
+            sendCommand({ action: 'lock' });
+            setTimeout(() => lockBtn.classList.remove('pressed'), 200);
+        });
+
+        // Voice input (speech recognition)
+        let recognition = null;
+        let isRecognitionActive = false;
+
+        speakBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+
+            // If already active, stop it
+            if (isRecognitionActive && recognition) {
+                recognition.stop();
+                speakBtn.classList.remove('active');
+                isRecognitionActive = false;
+                modeIndicator.textContent = 'Stopped';
+                modeIndicator.style.background = 'rgba(0, 0, 0, 0.7)';
+                setTimeout(() => {
+                    modeIndicator.textContent = isScrollMode ? 'Scroll Mode' : 'Touchpad Mode';
+                }, 1000);
+                return;
+            }
+
+            if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                if (!recognition) {
+                    recognition = new SpeechRecognition();
+                    recognition.continuous = false;
+                    recognition.interimResults = false;
+                    recognition.lang = 'en-US';
+
+                    recognition.onresult = (event) => {
+                        const text = event.results[0][0].transcript;
+                        sendCommand({ action: 'type', text: text });
+                        modeIndicator.textContent = 'Sent: ' + text.substring(0, 20);
+                        modeIndicator.style.background = 'rgba(0, 255, 0, 0.7)';
+                        setTimeout(() => {
+                            modeIndicator.textContent = isScrollMode ? 'Scroll Mode' : 'Touchpad Mode';
+                            modeIndicator.style.background = 'rgba(0, 0, 0, 0.7)';
+                        }, 2000);
+                    };
+
+                    recognition.onerror = (event) => {
+                        console.error('Speech error:', event.error);
+                        speakBtn.classList.remove('active');
+                        isRecognitionActive = false;
+                        modeIndicator.textContent = 'Voice error: ' + event.error;
+                        modeIndicator.style.background = 'rgba(255, 0, 0, 0.7)';
+                        setTimeout(() => {
+                            modeIndicator.textContent = isScrollMode ? 'Scroll Mode' : 'Touchpad Mode';
+                            modeIndicator.style.background = 'rgba(0, 0, 0, 0.7)';
+                        }, 2000);
+                    };
+
+                    recognition.onend = () => {
+                        speakBtn.classList.remove('active');
+                        isRecognitionActive = false;
+                        modeIndicator.style.background = 'rgba(0, 0, 0, 0.7)';
+                    };
+                }
+
+                try {
+                    speakBtn.classList.add('active');
+                    isRecognitionActive = true;
+                    modeIndicator.textContent = 'Listening...';
+                    modeIndicator.style.background = 'rgba(255, 0, 0, 0.7)';
+                    recognition.start();
+                } catch (err) {
+                    console.error('Speech start error:', err);
+                    speakBtn.classList.remove('active');
+                    isRecognitionActive = false;
+                    modeIndicator.textContent = 'Failed to start';
+                    modeIndicator.style.background = 'rgba(255, 0, 0, 0.7)';
+                    setTimeout(() => {
+                        modeIndicator.textContent = isScrollMode ? 'Scroll Mode' : 'Touchpad Mode';
+                        modeIndicator.style.background = 'rgba(0, 0, 0, 0.7)';
+                    }, 2000);
+                }
+            } else {
+                modeIndicator.textContent = 'Voice not supported';
+                modeIndicator.style.background = 'rgba(255, 0, 0, 0.7)';
+                setTimeout(() => {
+                    modeIndicator.textContent = isScrollMode ? 'Scroll Mode' : 'Touchpad Mode';
+                    modeIndicator.style.background = 'rgba(0, 0, 0, 0.7)';
+                }, 2000);
+            }
+        });
+
+        // Mute/unmute video
+        muteBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            isMuted = !isMuted;
+            video.muted = !isMuted; // Toggle: muted=false means audio ON
+            muteBtn.classList.toggle('active', !isMuted);
+            modeIndicator.textContent = isMuted ? 'Audio OFF' : 'Audio ON';
+            setTimeout(() => {
+                modeIndicator.textContent = isScrollMode ? 'Scroll Mode' : 'Touchpad Mode';
+            }, 1000);
+        });
+
+        // Zoom in
+        zoomInBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (currentZoom < MAX_ZOOM) {
+                currentZoom += ZOOM_STEP;
+                updateZoom();
+            }
+        });
+
+        // Zoom out
+        zoomOutBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (currentZoom > MIN_ZOOM) {
+                currentZoom -= ZOOM_STEP;
+                updateZoom();
+            }
+        });
+
+        // Reset zoom
+        resetZoomBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            currentZoom = 1;
+            panX = 0;
+            panY = 0;
+            zoomOriginX = 50;
+            zoomOriginY = 50;
+            updateZoom();
+        });
+
+        // Pinch to zoom on touchpad
+        touchpad.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 2) {
+                // Start pinch zoom
+                isPinching = true;
+                isPanning = false;
+                const touch1 = e.touches[0];
+                const touch2 = e.touches[1];
+
+                const dx = touch1.clientX - touch2.clientX;
+                const dy = touch1.clientY - touch2.clientY;
+                initialPinchDistance = Math.sqrt(dx * dx + dy * dy);
+                lastPinchZoom = currentZoom;
+
+                // Calculate pinch center relative to video
+                const centerX = (touch1.clientX + touch2.clientX) / 2;
+                const centerY = (touch1.clientY + touch2.clientY) / 2;
+
+                const rect = video.getBoundingClientRect();
+                const originX = ((centerX - rect.left) / rect.width) * 100;
+                const originY = ((centerY - rect.top) / rect.height) * 100;
+
+                // Set the zoom origin to the pinch center
+                zoomOriginX = Math.max(0, Math.min(100, originX));
+                zoomOriginY = Math.max(0, Math.min(100, originY));
+            } else if (e.touches.length === 1 && currentZoom > 1) {
+                // Start panning when zoomed in
+                isPanning = true;
+                isPinching = false;
+                lastSingleTouchX = e.touches[0].clientX;
+                lastSingleTouchY = e.touches[0].clientY;
+                lastPanX = panX;
+                lastPanY = panY;
+            }
+        }, { passive: true });
+
+        touchpad.addEventListener('touchmove', (e) => {
+            if (e.touches.length === 2 && isPinching) {
+                e.preventDefault();
+                const touch1 = e.touches[0];
+                const touch2 = e.touches[1];
+
+                const dx = touch1.clientX - touch2.clientX;
+                const dy = touch1.clientY - touch2.clientY;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                const scale = distance / initialPinchDistance;
+
+                currentZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, lastPinchZoom * scale));
+                updateZoom();
+            } else if (e.touches.length === 1 && isPanning && currentZoom > 1) {
+                e.preventDefault();
+                const touch = e.touches[0];
+                const deltaX = touch.clientX - lastSingleTouchX;
+                const deltaY = touch.clientY - lastSingleTouchY;
+
+                panX = lastPanX + deltaX;
+                panY = lastPanY + deltaY;
+                updateZoom();
+            }
+        }, { passive: false });
+
+        // Prevent control button touches from affecting touchpad
+        document.getElementById('controls').addEventListener('touchstart', (e) => {
+            e.stopPropagation();
+        });
+        document.getElementById('controls').addEventListener('touchmove', (e) => {
+            e.stopPropagation();
+        });
+        document.getElementById('controls').addEventListener('touchend', (e) => {
+            e.stopPropagation();
+        });
+
+        // Keyboard input handling
+        const kbSend = document.getElementById('kbSend');
+        const kbCancel = document.getElementById('kbCancel');
+
+        keyboardInput.addEventListener('keydown', (e) => {
+            // Map special keys (excluding Backspace to allow normal text editing)
+            const keyMap = {
+                'Enter': 'enter',
+                'Tab': 'tab',
+                'Escape': 'escape',
+                'ArrowUp': 'up',
+                'ArrowDown': 'down',
+                'ArrowLeft': 'left',
+                'ArrowRight': 'right'
+            };
+
+            if (e.key === 'Enter') {
+                // Send text on Enter
+                e.preventDefault();
+                const text = keyboardInput.value;
+                if (text) {
+                    sendCommand({ action: 'type', text: text });
+                    sendCommand({ action: 'key', key: 'enter' });
+                    keyboardInput.value = '';
+                    // Close keyboard after sending
+                    isKeyboardOpen = false;
+                    keyboardBtn.classList.remove('active');
+                    keyboardDiv.style.display = 'none';
+                    keyboardInput.blur();
+                }
+            } else if (keyMap[e.key] && e.key !== 'Enter') {
+                e.preventDefault();
+                sendCommand({ action: 'key', key: keyMap[e.key] });
+            }
+            // Backspace, Delete, and other typing keys work normally in the input field
+        });
+
+        // Send button
+        kbSend.addEventListener('click', (e) => {
+            e.preventDefault();
+            const text = keyboardInput.value;
+            if (text) {
+                sendCommand({ action: 'type', text: text });
+                keyboardInput.value = '';
+                // Close keyboard after sending
+                isKeyboardOpen = false;
+                keyboardBtn.classList.remove('active');
+                keyboardDiv.style.display = 'none';
+                keyboardInput.blur();
+            }
+        });
+
+        kbSend.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const text = keyboardInput.value;
+            if (text) {
+                sendCommand({ action: 'type', text: text });
+                keyboardInput.value = '';
+                // Close keyboard after sending
+                isKeyboardOpen = false;
+                keyboardBtn.classList.remove('active');
+                keyboardDiv.style.display = 'none';
+                keyboardInput.blur();
+            }
+        }, { passive: false });
+
+        // Cancel button - use touchstart for immediate response in landscape
+        kbCancel.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        }, { passive: false });
+
+        kbCancel.addEventListener('click', (e) => {
+            e.preventDefault();
+            keyboardInput.value = '';
+            isKeyboardOpen = false;
+            keyboardBtn.classList.remove('active');
+            keyboardDiv.style.display = 'none';
+            keyboardInput.blur();
+        });
+
+        kbCancel.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            keyboardInput.value = '';
+            isKeyboardOpen = false;
+            keyboardBtn.classList.remove('active');
+            keyboardDiv.style.display = 'none';
+            keyboardInput.blur();
+        }, { passive: false });
+
+        // Send button - use touchstart for immediate response in landscape
+        kbSend.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        }, { passive: false });
+
+        // Allow keyboard div to receive normal touch events
+        keyboardDiv.addEventListener('touchstart', (e) => {
+            e.stopPropagation();
+        }, { passive: true });
+        keyboardDiv.addEventListener('touchmove', (e) => {
+            e.stopPropagation();
+        }, { passive: true });
+        keyboardDiv.addEventListener('touchend', (e) => {
+            e.stopPropagation();
+        }, { passive: true });
+
+        // Prevent default touch behaviors
+        document.addEventListener('touchmove', (e) => {
+            if (e.target === touchpad || touchpad.contains(e.target)) {
+                e.preventDefault();
+            }
+        }, { passive: false });
+
+        // Prevent zoom on double tap
+        let lastTouchEnd = 0;
+        document.addEventListener('touchend', (e) => {
+            const now = Date.now();
+            if (now - lastTouchEnd <= 300) {
+                e.preventDefault();
+            }
+            lastTouchEnd = now;
+        }, { passive: false });
+
+        // Hide scroll indicator after first scroll
+        const scrollIndicator = document.querySelector('.scroll-indicator');
+        const controls = document.getElementById('controls');
+        let hasScrolled = false;
+
+        if (controls && scrollIndicator) {
+            controls.addEventListener('scroll', () => {
+                if (!hasScrolled) {
+                    hasScrolled = true;
+                    scrollIndicator.style.display = 'none';
+                }
+            }, { once: true });
+
+            // Also hide after 5 seconds
+            setTimeout(() => {
+                if (scrollIndicator) {
+                    scrollIndicator.style.display = 'none';
+                }
+            }, 5000);
+        }
+    </script>
+</body>
+</html>

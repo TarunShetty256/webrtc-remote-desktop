@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Remote Desktop Agent</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 450px;
+            width: 100%;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 24px;
+            margin-bottom: 8px;
+            background: linear-gradient(90deg, #00d4ff, #7c3aed);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .subtitle {
+            color: #888;
+            font-size: 14px;
+            margin-bottom: 30px;
+        }
+
+        .status-bar {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 15px 20px;
+            margin-bottom: 25px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #ff4757;
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.connected {
+            background: #2ed573;
+        }
+
+        .status-dot.streaming {
+            background: #ffa502;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .qr-container {
+            background: #fff;
+            border-radius: 20px;
+            padding: 20px;
+            margin: 20px auto;
+            display: inline-block;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        #qrcode canvas {
+            display: block;
+        }
+
+        .start-btn {
+            background: linear-gradient(90deg, #00d4ff, #7c3aed);
+            border: none;
+            color: white;
+            padding: 15px 40px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin: 20px 0;
+        }
+
+        .start-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(0, 212, 255, 0.4);
+        }
+
+        .start-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .connection-url {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 12px;
+            font-family: monospace;
+            font-size: 12px;
+            color: #00d4ff;
+            word-break: break-all;
+            margin: 15px 0;
+        }
+
+        .instructions {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 20px;
+            text-align: left;
+        }
+
+        .instructions h3 {
+            font-size: 14px;
+            color: #00d4ff;
+            margin-bottom: 12px;
+        }
+
+        .instructions ol {
+            padding-left: 20px;
+            color: #aaa;
+            font-size: 13px;
+        }
+
+        .instructions li {
+            margin-bottom: 8px;
+        }
+
+        .room-code {
+            font-size: 32px;
+            font-weight: bold;
+            letter-spacing: 8px;
+            color: #00d4ff;
+            margin: 15px 0;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .log-container {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            padding: 10px;
+            margin-top: 15px;
+            max-height: 100px;
+            overflow-y: auto;
+            text-align: left;
+        }
+
+        .log-entry {
+            font-family: monospace;
+            font-size: 11px;
+            color: #888;
+            padding: 2px 0;
+        }
+
+        .log-entry.success {
+            color: #2ed573;
+        }
+
+        .log-entry.error {
+            color: #ff4757;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Remote Desktop Agent</h1>
+        <p class="subtitle">Control your PC from your phone</p>
+
+        <div class="status-bar">
+            <div class="status-dot" id="statusDot"></div>
+            <span id="statusText">Ready to start</span>
+        </div>
+
+        <button class="start-btn" id="startBtn">Start Sharing</button>
+
+        <div id="connectionInfo" class="hidden">
+            <div class="room-code" id="roomCode"></div>
+            <div class="qr-container">
+                <div id="qrcode"></div>
+            </div>
+            <p style="color: #888; font-size: 12px; margin-top: 10px;">Scan with your phone camera</p>
+            <div class="connection-url" id="connectionUrl"></div>
+        </div>
+
+        <div class="instructions">
+            <h3>How to connect:</h3>
+            <ol>
+                <li>Click "Start Sharing" and select your screen</li>
+                <li>Scan the QR code with your phone</li>
+                <li>Your phone becomes a touchpad for your PC!</li>
+            </ol>
+        </div>
+
+        <div class="log-container" id="logContainer"></div>
+    </div>
+
+    <script>
+        const socket = io('http://localhost:3000');
+        let peerConnection;
+        let dataChannel;
+        const roomId = Math.floor(100000 + Math.random() * 900000).toString();
+
+        const config = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' }
+            ]
+        };
+
+        function log(message, type = 'info') {
+            const container = document.getElementById('logContainer');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            container.appendChild(entry);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function updateStatus(text, state) {
+            document.getElementById('statusText').textContent = text;
+            const dot = document.getElementById('statusDot');
+            dot.className = 'status-dot';
+            if (state) dot.classList.add(state);
+        }
+
+        // Get local IP address
+        async function getLocalIP() {
+            return new Promise((resolve) => {
+                const pc = new RTCPeerConnection({ iceServers: [] });
+                pc.createDataChannel('');
+                pc.createOffer().then(offer => pc.setLocalDescription(offer));
+                pc.onicecandidate = (ice) => {
+                    if (ice && ice.candidate && ice.candidate.candidate) {
+                        const match = ice.candidate.candidate.match(/([0-9]{1,3}\.){3}[0-9]{1,3}/);
+                        if (match) {
+                            pc.close();
+                            resolve(match[0]);
+                        }
+                    }
+                };
+                // Fallback
+                setTimeout(() => {
+                    pc.close();
+                    resolve('localhost');
+                }, 1000);
+            });
+        }
+
+        document.getElementById('startBtn').onclick = async () => {
+            const btn = document.getElementById('startBtn');
+            btn.disabled = true;
+            btn.textContent = 'Starting...';
+
+            try {
+                updateStatus('Requesting screen access...', 'streaming');
+                log('Requesting screen capture permission...');
+
+                // Get available screen sources using Electron's desktopCapturer
+                const sources = await window.electronAPI.getSources();
+                log(`Found ${sources.length} screen sources`);
+
+                if (sources.length === 0) {
+                    throw new Error('No screen sources found');
+                }
+
+                // Find the full screen source (not a window)
+                // Screen sources typically have names like "Entire Screen", "Screen 1", or just "Screen"
+                let source = sources.find(s =>
+                    s.name.toLowerCase().includes('entire screen') ||
+                    s.name.toLowerCase().includes('screen 1') ||
+                    s.name.toLowerCase() === 'screen' ||
+                    s.id.startsWith('screen:')
+                );
+
+                // Fallback to first source if no screen found
+                if (!source) {
+                    source = sources[0];
+                    log(`No screen source found, using: ${source.name}`);
+                } else {
+                    log(`Using full screen: ${source.name}`);
+                }
+
+                // Create stream using Electron's screen capture
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: false,
+                    video: {
+                        mandatory: {
+                            chromeMediaSource: 'desktop',
+                            chromeMediaSourceId: source.id,
+                            minWidth: 1280,
+                            maxWidth: 1920,
+                            minHeight: 720,
+                            maxHeight: 1080,
+                            minFrameRate: 15,
+                            maxFrameRate: 30
+                        }
+                    }
+                });
+
+                log('Screen capture granted', 'success');
+                updateStatus('Connecting to server...', 'streaming');
+
+                // Join the room
+                socket.emit('join-room', roomId);
+                log(`Joined room: ${roomId}`, 'success');
+
+                // Get local IP for connection URL
+                const localIP = await getLocalIP();
+                const connectionUrl = `http://${localIP}:3000/?room=${roomId}`;
+
+                // Display room code
+                document.getElementById('roomCode').textContent = roomId;
+
+                // Generate QR code
+                const qrContainer = document.getElementById('qrcode');
+                qrContainer.innerHTML = '';
+
+                try {
+                    if (typeof QRCode !== 'undefined' && QRCode.toCanvas) {
+                        // Use qrcode library (npm style)
+                        QRCode.toCanvas(connectionUrl, {
+                            width: 200,
+                            margin: 2,
+                            color: {
+                                dark: '#1a1a2e',
+                                light: '#ffffff'
+                            }
+                        }, (err, canvas) => {
+                            if (err) {
+                                log('QR generation failed, showing URL instead', 'error');
+                                qrContainer.innerHTML = `<p style="color:#000;word-break:break-all;padding:10px;">${connectionUrl}</p>`;
+                                return;
+                            }
+                            qrContainer.appendChild(canvas);
+                        });
+                    } else if (typeof QRCode !== 'undefined') {
+                        // Use qrcodejs library style
+                        new QRCode(qrContainer, {
+                            text: connectionUrl,
+                            width: 200,
+                            height: 200,
+                            colorDark: '#1a1a2e',
+                            colorLight: '#ffffff'
+                        });
+                    } else {
+                        // Fallback: just show the URL
+                        log('QRCode library not loaded, showing URL', 'error');
+                        qrContainer.innerHTML = `<p style="color:#000;word-break:break-all;padding:10px;font-size:10px;">${connectionUrl}</p>`;
+                    }
+                } catch (qrErr) {
+                    log(`QR Error: ${qrErr.message}`, 'error');
+                    qrContainer.innerHTML = `<p style="color:#000;word-break:break-all;padding:10px;font-size:10px;">${connectionUrl}</p>`;
+                }
+
+                document.getElementById('connectionUrl').textContent = connectionUrl;
+                document.getElementById('connectionInfo').classList.remove('hidden');
+
+                // Set up WebRTC
+                peerConnection = new RTCPeerConnection(config);
+
+                // Add screen stream tracks
+                stream.getTracks().forEach(track => {
+                    peerConnection.addTrack(track, stream);
+                    log(`Added track: ${track.kind}`);
+                });
+
+                // PC CREATES the data channel (offerer creates it)
+                dataChannel = peerConnection.createDataChannel('controls');
+                log('Data channel created');
+
+                dataChannel.onopen = () => {
+                    log('Control channel opened', 'success');
+                    updateStatus('Connected & Streaming', 'connected');
+                };
+
+                dataChannel.onclose = () => {
+                    log('Control channel closed');
+                    updateStatus('Disconnected', '');
+                };
+
+                dataChannel.onmessage = (e) => {
+                    try {
+                        const data = JSON.parse(e.data);
+                        handleRemoteCommand(data);
+                    } catch (err) {
+                        log(`Invalid command: ${err.message}`, 'error');
+                    }
+                };
+
+                // Handle ICE candidates
+                peerConnection.onicecandidate = (event) => {
+                    if (event.candidate) {
+                        socket.emit('ice-candidate', {
+                            room: roomId,
+                            candidate: event.candidate
+                        });
+                    }
+                };
+
+                peerConnection.onconnectionstatechange = () => {
+                    log(`Connection state: ${peerConnection.connectionState}`);
+                    if (peerConnection.connectionState === 'connected') {
+                        updateStatus('Connected & Streaming', 'connected');
+                    } else if (peerConnection.connectionState === 'disconnected') {
+                        updateStatus('Disconnected', '');
+                    }
+                };
+
+                // Create and send offer
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+                socket.emit('offer', { room: roomId, offer: offer });
+                log('Sent WebRTC offer');
+
+                updateStatus('Waiting for phone...', 'streaming');
+                btn.textContent = 'Sharing Active';
+
+                // Handle stream ending
+                stream.getVideoTracks()[0].onended = () => {
+                    log('Screen sharing stopped');
+                    updateStatus('Sharing stopped', '');
+                    btn.disabled = false;
+                    btn.textContent = 'Start Sharing';
+                };
+
+            } catch (err) {
+                log(`Error: ${err.message}`, 'error');
+                updateStatus('Failed to start', '');
+                btn.disabled = false;
+                btn.textContent = 'Start Sharing';
+            }
+        };
+
+        function handleRemoteCommand(data) {
+            log(`CMD: ${data.action}`, 'success');
+            switch (data.action) {
+                case 'move':
+                    window.electronAPI.moveMouse(data.x, data.y);
+                    break;
+                case 'click':
+                    window.electronAPI.clickMouse(data.button || 'left');
+                    break;
+                case 'doubleclick':
+                    window.electronAPI.doubleClickMouse(data.button || 'left');
+                    break;
+                case 'scroll':
+                    window.electronAPI.scrollMouse(data.deltaX || 0, data.deltaY || 0);
+                    break;
+                case 'key':
+                    window.electronAPI.keyTap(data.key, data.modifiers);
+                    break;
+                case 'type':
+                    window.electronAPI.typeText(data.text);
+                    break;
+                case 'lock':
+                    window.electronAPI.lockScreen();
+                    break;
+                default:
+                    log(`Unknown command: ${data.action}`);
+            }
+        }
+
+        // Socket event handlers
+        socket.on('connect', () => {
+            log('Connected to signaling server', 'success');
+        });
+
+        socket.on('disconnect', () => {
+            log('Disconnected from signaling server', 'error');
+            updateStatus('Server disconnected', '');
+        });
+
+        socket.on('answer', async (answer) => {
+            log('Received answer from remote');
+            try {
+                await peerConnection.setRemoteDescription(answer);
+                log('Remote description set', 'success');
+            } catch (err) {
+                log(`Failed to set remote description: ${err.message}`, 'error');
+            }
+        });
+
+        socket.on('ice-candidate', async (candidate) => {
+            try {
+                await peerConnection.addIceCandidate(candidate);
+            } catch (err) {
+                log(`ICE candidate error: ${err.message}`, 'error');
+            }
+        });
+
+        socket.on('peer-joined', async (peerId) => {
+            log(`Remote device connected: ${peerId}`, 'success');
+            // Resend the offer when a new peer joins
+            if (peerConnection && peerConnection.localDescription) {
+                log('Resending offer to new peer...');
+                socket.emit('offer', { room: roomId, offer: peerConnection.localDescription });
+            }
+        });
+    </script>
+</body>
+</html>

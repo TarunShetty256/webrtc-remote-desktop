@@ -1,0 +1,59 @@
+{
+  "name": "remote-desktop-agent",
+  "version": "1.0.0",
+  "description": "Remote desktop control application - control your PC from your phone",
+  "main": "main.js",
+  "scripts": {
+    "start": "npm run server & npm run app",
+    "server": "node server.js",
+    "app": "electron .",
+    "build": "electron-builder",
+    "build:mac": "electron-builder --mac",
+    "build:win": "electron-builder --win",
+    "build:linux": "electron-builder --linux"
+  },
+  "build": {
+    "appId": "com.remotedesktop.agent",
+    "productName": "Remote Desktop Agent",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "node_modules/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.utilities",
+      "target": "dmg"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  },
+  "keywords": [
+    "remote-desktop",
+    "webrtc",
+    "electron"
+  ],
+  "author": "",
+  "license": "MIT",
+  "type": "commonjs",
+  "dependencies": {
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "ngrok": "^5.0.0-beta.2",
+    "qrcode": "^1.5.4",
+    "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3"
+  },
+  "devDependencies": {
+    "electron": "^41.0.3",
+    "electron-builder": "^26.8.1",
+    "robotjs": "^0.7.0"
+  }
+}
