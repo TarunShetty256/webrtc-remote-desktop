@@ -329,9 +329,8 @@
                 socket.emit('join-room', roomId);
                 log(`Joined room: ${roomId}`, 'success');
 
-                // Get local IP for connection URL
-                const localIP = await getLocalIP();
-                const connectionUrl = `http://${localIP}:3000/?room=${roomId}`;
+                // Use hosted server URL
+                const connectionUrl = `https://webrtc-remote-desktop-o108.onrender.com/?room=${roomId}`;
 
                 // Display room code
                 document.getElementById('roomCode').textContent = roomId;
